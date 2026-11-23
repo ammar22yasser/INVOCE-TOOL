@@ -193,18 +193,29 @@ function renderZ(d){
  h+='<tr class="tt"><td>الإجمالي</td><td>'+tq+'</td><td></td><td></td><td></td><td>'+fmt(tt)+'</td></tr></table></div>';
  return h;
 }
-var WORKER_URL='https://bold-mouse-c0e8.ammar5005yasser.workers.dev/';
-function shrink(file){return new Promise(function(res,rej){var im=new Image(),u=URL.createObjectURL(file);im.onload=function(){var k=Math.min(1,1800/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);res(c.toDataURL('image/jpeg',0.9).split(',')[1])};im.onerror=rej;im.src=u})}
-async function askAI(prompt,file){var b=await shrink(file);var r=await fetch(WORKER_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:prompt,image:b,mime:'image/jpeg'})});if(!r.ok)throw new Error('worker '+r.status);return await r.json()}
+var WORKER_URL='https://bold-mouse-c0e8.ammar5005yasser.workers.dev';
+function shrink(file){return new Promise(function(res,rej){var im=new Image(),u=URL.createObjectURL(file);im.onload=function(){var k=Math.min(1,1400/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);res(c.toDataURL('image/jpeg',0.85).split(',')[1])};im.onerror=rej;im.src=u})}
+async function askAI(prompt,file,onRetry){
+ var b=await shrink(file),last='';
+ for(var n=0;n<4;n++){
+  var r=await fetch(WORKER_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:prompt,image:b,mime:'image/jpeg'})});
+  if(r.ok)return await r.json();
+  var t='';try{var j=await r.json();t=(j.error||'')+' '+(j.detail||'')}catch(e){}
+  last=t.trim().slice(0,250)||('worker '+r.status);
+  if([502,503,504].indexOf(r.status)<0)break;
+  if(n<3){if(onRetry)onRetry(n+2);await new Promise(function(res){setTimeout(res,6000)})}
+ }
+ throw new Error(last);
+}
 async function run(){
- var s={json:function(p,o){return askAI(p,o.images[0])}};
+ var s={json:function(p,o){return askAI(p,o.images[0],function(n){card.textContent='جوجل مشغول دلوقتي، بحاول تاني ('+n+'/4)...'})}};
  busy=true;drawCalc();$('res').innerHTML='';
  var isZ=sec==='wh'&&wr===WHS[0];
  var pr=isZ?PROMPTZ:(sec==='co'&&co===COS[1])?PROMPT.replace('هامش ثابت للصيدلي','ربح ثابت للموزع').replace('وصفر للأصناف الخاضعة','لكل الأصناف')+' تجاهل أي عمود اسمه إجمالي الكمية، وخذ qty وbonus من عمود الكمية فقط.':PROMPT;
  for(var i=0;i<pfiles.length;i++){
   var card=document.createElement('div');card.className='card';card.style.marginTop='12px';card.textContent='جاري قراءة الصورة '+(i+1)+'...';$('res').appendChild(card);
   try{var d=await s.json(pr,{images:[pfiles[i]],modelTier:'default'});card.innerHTML=isZ?renderZ(d):render(d,sec==='co'&&co===COS[1])}
-  catch(e){card.textContent='ماقدرتش أقرأ الصورة، جرّب صورة أوضح أو راجع الاتصال بالإنترنت.'}
+  catch(e){card.textContent='ماقدرتش أقرأ الصورة، جرّب صورة أوضح أو راجع الاتصال بالإنترنت.'+(e&&e.message?' ('+e.message+')':'')}
  }
  busy=false;drawCalc();
 }
